@@ -8,6 +8,7 @@ const courseTitle = document.getElementById('course-title');
 const skillsContainer = document.getElementById('skills-container');
 const saveCourseBtn = document.getElementById('save-course-btn');
 const exportJsonBtn = document.getElementById('export-json-btn');
+const exportTrainstationBtn = document.getElementById('export-trainstation-btn');
 const newCourseBtn = document.getElementById('new-course-btn');
 const videoModal = document.getElementById('video-modal');
 const videoContainer = document.getElementById('video-container');
@@ -33,6 +34,7 @@ topicInput.addEventListener('keypress', (e) => {
 });
 saveCourseBtn.addEventListener('click', saveCourse);
 exportJsonBtn.addEventListener('click', exportToJson);
+exportTrainstationBtn.addEventListener('click', exportToTrainstation);
 newCourseBtn.addEventListener('click', resetToInput);
 closeBtn.addEventListener('click', closeModal);
 videoModal.addEventListener('click', (e) => {
@@ -65,6 +67,35 @@ async function generateCourse() {
         }
 
         currentCourse = await response.json();
+
+        // Check for debug info and display warnings
+        if (currentCourse._debug) {
+            const debug = currentCourse._debug;
+            console.log('📊 Course Generation Debug:', debug);
+
+            if (debug.failedSearches > 0 || debug.errors) {
+                let warningMsg = `Varning: ${debug.successfulSearches}/${debug.totalSearches} videosökningar lyckades.`;
+
+                if (debug.errors && debug.errors.length > 0) {
+                    const firstError = debug.errors[0];
+                    if (firstError.reason === 'quotaExceeded') {
+                        warningMsg += '\n\n⚠️ YouTube API-kvot överskiden! Vänta till imorgon eller använd en annan API-nyckel.';
+                    } else if (firstError.code === 403) {
+                        warningMsg += `\n\n⚠️ API-åtkomst nekad: ${firstError.message}`;
+                    } else if (firstError.code === 400) {
+                        warningMsg += `\n\n⚠️ Ogiltig förfrågan: ${firstError.message}`;
+                    } else {
+                        warningMsg += `\n\nFel: ${firstError.message || 'Okänt fel'}`;
+                    }
+                }
+
+                console.warn(warningMsg);
+                if (debug.successfulSearches === 0) {
+                    alert(warningMsg);
+                }
+            }
+        }
+
         displayCourse(currentCourse);
 
     } catch (error) {
@@ -362,6 +393,118 @@ function exportToJson() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+}
+
+// Generate UUID v4
+function generateUUID() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
+
+// Get difficulty level string for Trainstation
+function getTrainstationLevel(index, total) {
+    const position = index / total;
+    if (position < 0.33) return 'beginner';
+    if (position < 0.66) return 'intermediate';
+    return 'advanced';
+}
+
+// Export to Trainstation JSON format
+function exportToTrainstation() {
+    if (!currentCourse) return;
+
+    const entities = [];
+
+    // Create root entity for the course
+    const rootId = generateUUID();
+    const sectionIds = [];
+
+    // Process each skill as a section
+    currentCourse.skills.forEach((skill) => {
+        const sectionId = generateUUID();
+        sectionIds.push(sectionId);
+
+        const videoIds = [];
+
+        // Process each video
+        if (skill.videos && skill.videos.length > 0) {
+            skill.videos.forEach((video, videoIndex) => {
+                const videoId = generateUUID();
+                videoIds.push(videoId);
+
+                // Create video entity
+                const videoEntity = {
+                    id: videoId,
+                    type: 'video',
+                    status: 'public',
+                    labels: [currentCourse.topic, skill.name],
+                    children: [],
+                    attributes: {
+                        title: video.title,
+                        description: video.searchTerm || skill.description,
+                        url: `https://www.youtube.com/watch?v=${video.id}`,
+                        level: getTrainstationLevel(videoIndex, skill.videos.length),
+                        thumbnail: video.thumbnail
+                    }
+                };
+                entities.push(videoEntity);
+            });
+        }
+
+        // Create section entity for the skill
+        const sectionEntity = {
+            id: sectionId,
+            type: 'section',
+            status: 'public',
+            labels: [currentCourse.topic],
+            children: videoIds,
+            attributes: {
+                title: skill.name,
+                description: skill.description
+            }
+        };
+        entities.push(sectionEntity);
+    });
+
+    // Create root entity
+    const rootEntity = {
+        id: rootId,
+        type: 'root',
+        status: 'public',
+        labels: [],
+        children: sectionIds,
+        attributes: {
+            title: currentCourse.topic,
+            description: `AI-genererad kurs om ${currentCourse.topic}`
+        }
+    };
+    entities.push(rootEntity);
+
+    // Create the export object
+    const trainstationExport = {
+        root: rootId,
+        entities: entities,
+        exportedAt: new Date().toISOString(),
+        source: 'CourseCreator'
+    };
+
+    // Download the file
+    const dataStr = JSON.stringify(trainstationExport, null, 2);
+    const blob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${currentCourse.topic.replace(/\s+/g, '_')}_trainstation.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    alert(`Trainstation JSON exporterad! Filen innehåller ${entities.length} entities.`);
 }
 
 // Reset to input view

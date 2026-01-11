@@ -283,20 +283,55 @@ Svara ENDAST med giltig JSON i detta format:
 
         const apiKey = process.env.YOUTUBE_API_KEY;
         if (!apiKey) {
+            console.warn('⚠️ YOUTUBE_API_KEY is not set!');
             return res.json({ ...courseStructure, videos: null, message: 'No YouTube API key - returning structure only' });
         }
+
+        console.log('📺 Starting YouTube video search...');
+        console.log(`   API Key present: ${apiKey ? 'Yes (' + apiKey.substring(0, 10) + '...)' : 'No'}`);
+
+        let totalSearches = 0;
+        let successfulSearches = 0;
+        let failedSearches = 0;
+        let youtubeErrors = [];
 
         const skillsWithVideos = await Promise.all(
             courseStructure.skills.map(async (skill) => {
                 const videos = [];
 
                 for (const term of skill.searchTerms) {
+                    totalSearches++;
                     try {
-                        const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&q=${encodeURIComponent(term + ' ' + topic + ' tutorial')}&maxResults=1&order=relevance&key=${apiKey}`;
+                        const searchQuery = `${term} ${topic} tutorial`;
+                        const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&q=${encodeURIComponent(searchQuery)}&maxResults=1&order=relevance&key=${apiKey}`;
+
+                        console.log(`   🔍 Searching: "${searchQuery}"`);
+
                         const response = await fetch(searchUrl);
                         const data = await response.json();
 
+                        // Check for API errors
+                        if (data.error) {
+                            failedSearches++;
+                            const errorInfo = {
+                                term: term,
+                                code: data.error.code,
+                                message: data.error.message,
+                                reason: data.error.errors?.[0]?.reason || 'unknown'
+                            };
+                            youtubeErrors.push(errorInfo);
+                            console.error(`   ❌ YouTube API Error:`, JSON.stringify(errorInfo, null, 2));
+
+                            // If quota exceeded, stop all searches
+                            if (data.error.errors?.[0]?.reason === 'quotaExceeded') {
+                                console.error('   🚫 QUOTA EXCEEDED - Stopping all YouTube searches');
+                                break;
+                            }
+                            continue;
+                        }
+
                         if (data.items && data.items.length > 0) {
+                            successfulSearches++;
                             const item = data.items[0];
                             videos.push({
                                 id: item.id.videoId,
@@ -305,9 +340,19 @@ Svara ENDAST med giltig JSON i detta format:
                                 channelTitle: item.snippet.channelTitle,
                                 searchTerm: term
                             });
+                            console.log(`   ✅ Found: "${item.snippet.title.substring(0, 50)}..."`);
+                        } else {
+                            failedSearches++;
+                            console.log(`   ⚠️ No results for: "${term}"`);
                         }
                     } catch (err) {
-                        console.error(`Failed to search for: ${term}`, err);
+                        failedSearches++;
+                        console.error(`   ❌ Network/fetch error for "${term}":`, err.message);
+                        youtubeErrors.push({
+                            term: term,
+                            code: 'FETCH_ERROR',
+                            message: err.message
+                        });
                     }
                 }
 
@@ -318,10 +363,28 @@ Svara ENDAST med giltig JSON i detta format:
             })
         );
 
+        // Summary logging
+        console.log('\n📊 YouTube Search Summary:');
+        console.log(`   Total searches: ${totalSearches}`);
+        console.log(`   Successful: ${successfulSearches}`);
+        console.log(`   Failed: ${failedSearches}`);
+        if (youtubeErrors.length > 0) {
+            console.log(`   Errors encountered:`);
+            youtubeErrors.forEach(err => {
+                console.log(`     - ${err.term}: ${err.reason || err.code} - ${err.message}`);
+            });
+        }
+
         res.json({
             topic: courseStructure.topic,
             skills: skillsWithVideos,
-            generatedAt: new Date().toISOString()
+            generatedAt: new Date().toISOString(),
+            _debug: {
+                totalSearches,
+                successfulSearches,
+                failedSearches,
+                errors: youtubeErrors.length > 0 ? youtubeErrors.slice(0, 5) : undefined // Only first 5 errors
+            }
         });
 
     } catch (error) {
