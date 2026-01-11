@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Course Creator</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>Course Creator</h1>
+        <p>Skapa AI-genererade kurser med YouTube-videos</p>
+    </header>
+
+    <main>
+        <section id="input-section">
+            <div class="input-container">
+                <input type="text" id="topic-input" placeholder="Vad vill du lära dig? (t.ex. Ledarskap, Programmering, Fotografering...)">
+                <button id="generate-btn">Skapa kurs</button>
+            </div>
+            <div id="loading" class="hidden">
+                <div class="spinner"></div>
+                <p>Genererar kurs med AI... Detta kan ta en minut.</p>
+            </div>
+
+            <!-- Saved Courses -->
+            <section id="saved-courses-section">
+                <h3>Sparade kurser</h3>
+                <div id="saved-courses-list"></div>
+                <div class="import-section">
+                    <button id="import-json-btn">Importera JSON</button>
+                    <input type="file" id="import-file" accept=".json" class="hidden">
+                </div>
+            </section>
+        </section>
+
+        <section id="course-section" class="hidden">
+            <div class="course-header">
+                <h2 id="course-title"></h2>
+                <div class="course-actions">
+                    <button id="save-course-btn">Spara kurs</button>
+                    <button id="export-json-btn">Exportera JSON</button>
+                    <button id="new-course-btn">Ny kurs</button>
+                </div>
+            </div>
+            <div id="skills-container"></div>
+        </section>
+    </main>
+
+    <!-- Video Modal -->
+    <div id="video-modal" class="modal hidden">
+        <div class="modal-content">
+            <button class="close-btn">&times;</button>
+            <div id="video-container"></div>
+            <h3 id="video-title"></h3>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

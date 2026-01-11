@@ -1,0 +1,24 @@
+databases:
+  - name: coursecreator-db
+    databaseName: coursecreator
+    user: coursecreator
+    plan: free
+
+services:
+  - type: web
+    name: coursecreator
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: coursecreator-db
+          property: connectionString
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: YOUTUBE_API_KEY
+        sync: false
